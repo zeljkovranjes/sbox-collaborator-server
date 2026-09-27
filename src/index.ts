@@ -20,6 +20,7 @@ async function main() {
   const mcp = new McpGateway(services, VERSION);
   const app = createApp({ services, mcp, version: VERSION, startedAt: Date.now() });
   const sweeper = new Sweeper(services, mcp);
+  services.discord.start();
 
   const server = createServer(app);
   server.keepAliveTimeout = 65_000; // longer than typical proxy idle timeouts

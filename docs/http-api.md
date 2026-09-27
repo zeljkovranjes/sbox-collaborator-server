@@ -193,3 +193,13 @@ Overview    { project: Project, me: Developer, team: { developer: Developer, age
 
 Blocker     { kind: "task"|"message"|"test", title, detail, at, refId }
 ```
+
+## v1.1 additions
+
+| method | path | result |
+|---|---|---|
+| PATCH | `/api/me` `{ displayName?, discordUserId? }` | `Developer` |
+| GET | `/api/digests?project=<id>&limit=10` | `Digest[]` (weekly, newest first) |
+| GET | `/hooks/collab-check.mjs` | the git hook script (public, no secrets) |
+
+New SSE event types: `task_handoff`, `digest_created`.

@@ -81,13 +81,18 @@ export class AccountService {
     return row;
   }
 
-  async updateDeveloper(id: string, patch: { displayName?: string; githubLogin?: string | null; role?: 'admin' | 'member'; projectIds?: string[] | null; disabled?: boolean }): Promise<DeveloperRow> {
+  async updateDeveloper(id: string, patch: { displayName?: string; githubLogin?: string | null; role?: 'admin' | 'member'; projectIds?: string[] | null; disabled?: boolean; discordUserId?: string | null }): Promise<DeveloperRow> {
     const values: Record<string, unknown> = {};
     if (patch.displayName !== undefined) values.displayName = patch.displayName.trim().slice(0, 60);
     if (patch.githubLogin !== undefined) values.githubLogin = patch.githubLogin?.trim() || null;
     if (patch.role !== undefined) values.role = patch.role;
     if (patch.projectIds !== undefined) values.projectIds = patch.projectIds ? toJson(patch.projectIds) : null;
     if (patch.disabled !== undefined) values.disabledAt = patch.disabled ? this.deps.clock.now() : null;
+    if (patch.discordUserId !== undefined) {
+      const discord = patch.discordUserId?.trim() || null;
+      if (discord && !/^\d{15,22}$/.test(discord)) throw invalid('Discord user ids are 15–22 digits (Discord: Settings ▸ Advanced ▸ Developer Mode, then right-click your name ▸ Copy User ID)');
+      values.discordUserId = discord;
+    }
     if (!Object.keys(values).length) throw invalid('Nothing to update');
     const row = await this.deps.db.updateTable('developers').set(values).where('id', '=', id).returningAll().executeTakeFirst();
     if (!row) throw notFound(`Developer "${id}"`);

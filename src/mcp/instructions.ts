@@ -3,17 +3,19 @@ export const SERVER_INSTRUCTIONS = `This server connects you to your teammates' 
 
 Before starting work:
 1. agent_register (clientType, machine, model, branch) – once per session.
-2. project_sync_context with focus = what you are about to do, paths = files you expect to touch.
+2. team_catch_up (what teammates did while you were away), then project_sync_context with focus = what you are about to do, paths = files you expect to touch.
 3. message_get_unread; handle blockers/requests/handoffs, then message_acknowledge.
 4. Read the relevant decisions in the packet (decision_list with a query for more) and follow them.
-5. Pick or create the task (task_list / task_create), then task_claim. If the claim conflicts, do not do that work: coordinate or pick another task.
+5. Pick or create the task (task_list / task_create), then task_claim. If the claim conflicts, do not do that work: coordinate or pick another task. Work on the task's suggestedBranch, and read lastHandoff if the task has one.
 6. file_check_conflict, then file_reserve the files/directories you will change (reason + taskId). Never edit files reserved by another developer without agreeing first (message_send).
 7. agent_set_status working, with task, branch and files.
 
 While working:
 - Any call counts as a heartbeat; on long stretches without calls use agent_heartbeat so your reservations survive.
 - Announce blockers (task_block) and important API changes early (change_start / message_send warning). Record lasting technical choices with decision_create and engine facts/gotchas with knowledge_add.
+- Before editing unfamiliar files, file_history shows who touched them, when and why.
 - If a tool result ends with [team notices], read them: they are unread messages, breaking changes or broken builds from teammates.
+- Stopping before the task is done (out of time, blocked, switching)? task_handoff with where you got to, what comes next and gotchas – optionally to a teammate.
 
 After work:
 - Build/test (test_result: passed/failed with errors), commit with the task number in the message (e.g. "#42 Rewrite buoyancy").

@@ -1,4 +1,6 @@
-import type { Activity, Agent, Change, Me, Overview, Project } from '../api';
+import { useEffect, useState } from 'preact/hooks';
+import { api, type Activity, type Agent, type CatchUp, type Change, type Me, type Overview, type Project } from '../api';
+import { SummaryText } from '../summary';
 import { ago, Avatar, clock, dayLabel, Empty, Eyebrow, Icon, Loading, Pill, until } from '../lib';
 import { Link } from '../router';
 
@@ -126,6 +128,27 @@ function ChangeCard({ change }: { change: Change }) {
   );
 }
 
+/** "While you were away": fetched once per project per page load (it moves your catch-up marker). */
+function CatchUpCard({ project }: { project: Project }) {
+  const [data, setData] = useState<CatchUp | null>(null);
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    setData(null);
+    setHidden(false);
+    api.tool<CatchUp>('team_catch_up', { project: project.id }).then(setData).catch(() => setData(null));
+  }, [project.id]);
+  if (!data || hidden) return null;
+  if (!Object.values(data.counts).some((n) => n > 0)) return null;
+  return (
+    <div class="panel" style="margin-bottom:18px;border-color:rgba(176,226,77,0.35)">
+      <Eyebrow icon="waving_hand" title="While you were away" aside={<button class="linkish tiny" onClick={() => setHidden(true)}>dismiss</button>} />
+      <div class="panel-body">
+        <SummaryText text={data.summary} />
+      </div>
+    </div>
+  );
+}
+
 export function HomePage({ overview, error, project, me }: { overview: Overview | undefined; error: string | null; project: Project; me: Me }) {
   if (!overview) return error ? <div class="banner red"><Icon name="error" />{error}</div> : <Loading />;
   const onlineAgents = overview.team.reduce((n, t) => n + t.agents.length, 0);
@@ -142,6 +165,8 @@ export function HomePage({ overview, error, project, me }: { overview: Overview 
           </p>
         </div>
       </div>
+
+      <CatchUpCard project={project} />
 
       <div class="stat-strip">
         <div class="stat">

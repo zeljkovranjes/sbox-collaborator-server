@@ -75,7 +75,7 @@ export function useRealtime(project: string | null, onEvent?: (type: string, dat
     };
     source.onopen = () => setLive(true);
     source.onerror = () => setLive(false);
-    const types = ['agent_registered', 'agent_status_changed', 'agent_offline', 'task_created', 'task_claimed', 'task_updated', 'task_completed', 'file_reserved', 'file_released', 'reservation_expired', 'change_started', 'change_completed', 'change_abandoned', 'message_received', 'commit_detected', 'branch_updated', 'pull_request_updated', 'issue_updated', 'decision_created', 'decision_superseded', 'knowledge_added', 'test_started', 'test_result', 'build_broken', 'asset_changed', 'project_updated'];
+    const types = ['agent_registered', 'agent_status_changed', 'agent_offline', 'task_created', 'task_claimed', 'task_updated', 'task_completed', 'file_reserved', 'file_released', 'reservation_expired', 'change_started', 'change_completed', 'change_abandoned', 'message_received', 'commit_detected', 'branch_updated', 'pull_request_updated', 'issue_updated', 'decision_created', 'decision_superseded', 'knowledge_added', 'test_started', 'test_result', 'build_broken', 'asset_changed', 'project_updated', 'task_handoff', 'digest_created'];
     for (const type of types) {
       source.addEventListener(type, (event) => {
         bump();

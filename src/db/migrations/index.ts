@@ -1,6 +1,7 @@
 import type { Kysely } from 'kysely';
 import { Migrator, type Migration, type MigrationProvider } from 'kysely/migration';
 import * as initial from './001_initial.js';
+import * as v11 from './002_handoffs_digests_notifications.js';
 
 export type MigrationDialect = 'postgres' | 'sqlite';
 
@@ -9,6 +10,7 @@ type Step = { up(db: Kysely<any>, dialect: MigrationDialect): Promise<void> };
 /* Add new migrations here, in order. Never edit a migration that has shipped. */
 const STEPS: Record<string, Step> = {
   '001_initial': initial,
+  '002_handoffs_digests_notifications': v11,
 };
 
 class StaticProvider implements MigrationProvider {

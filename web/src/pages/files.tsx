@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import { api, type Me, type Project, type Reservation } from '../api';
 import { ago, Avatar, Empty, Eyebrow, Icon, Loading, Modal, until, useAction, useLoad } from '../lib';
+import { HistoryPanel } from '../summary';
 
 interface CheckResult {
   clear: boolean;
@@ -101,6 +102,13 @@ export function FilesPage({ project, me }: { project: Project; me: Me }) {
             ))
           )}
         </div>
+        <div>
+        <div class="panel">
+          <Eyebrow icon="history" title="Who touched this?" />
+          <div class="panel-body">
+            <HistoryPanel project={project} />
+          </div>
+        </div>
         <div class="panel">
           <Eyebrow icon="rule" title="Check before editing" />
           <form class="panel-body col" onSubmit={runCheck}>
@@ -117,6 +125,7 @@ export function FilesPage({ project, me }: { project: Project; me: Me }) {
               </div>
             )}
           </form>
+        </div>
         </div>
       </div>
       {reserving && <ReserveModal project={project} onClose={() => (setReserving(false), reservations.reload())} />}

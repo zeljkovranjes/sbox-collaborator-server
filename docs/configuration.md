@@ -25,6 +25,8 @@ All configuration is environment variables. Any secret can be given as `NAME_FIL
 | `TRUST_PROXY` | `loopback` | Express trust-proxy setting (`1` behind one reverse proxy). |
 | `COOKIE_SECURE` | auto (`https` PUBLIC_URL) | Force the `Secure` cookie flag. |
 | `WEB_DIR` | `./dist/web` | Built dashboard location. |
+| `DISCORD_WEBHOOK_URL` | – | Default Discord webhook for every project (projects can set their own). See [notifications.md](notifications.md). |
+| `DIGEST_WEEKDAY` / `DIGEST_HOUR` | `1` / `9` | Weekly digest day (0 Sunday … 6 Saturday, `-1` off) and local hour. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 
 Durations accept `30s`, `15m`, `4h`, `2d` or milliseconds.

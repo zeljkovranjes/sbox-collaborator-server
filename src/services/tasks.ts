@@ -1,5 +1,5 @@
 import { sql } from 'kysely';
-import type { TaskRow } from '../db/schema.js';
+import type { TaskNoteRow, TaskRow } from '../db/schema.js';
 import { AppError, conflict, forbidden, invalid, notFound } from '../lib/errors.js';
 import { list, parseJson, toJson } from '../lib/json.js';
 import { uniquePaths } from '../lib/paths.js';
@@ -45,6 +45,48 @@ export interface Task {
   version: number;
   /** Owned, but the owning agent has gone offline. */
   stale: boolean;
+  /** The task's branch, or a suggested one: task/<id>-<slug>. */
+  suggestedBranch: string;
+  /** The most recent handoff note, so whoever picks it up knows where things stand. */
+  lastHandoff: TaskNote | null;
+}
+
+export interface TaskNote {
+  id: number;
+  taskId: number;
+  kind: 'handoff' | 'note';
+  authorId: string;
+  authorName: string;
+  summary: string;
+  next: string | null;
+  gotchas: string | null;
+  files: string[];
+  toDeveloperId: string | null;
+  createdAt: string;
+}
+
+export interface HandoffInput {
+  summary: string;
+  next?: string;
+  gotchas?: string;
+  files?: string[];
+  to?: string;
+  keepReservations?: boolean;
+}
+
+/** "Sail trim UI!" -> "task/42-sail-trim-ui" */
+export function branchFor(id: number, title: string): string {
+  const words = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 6)
+    .join('-')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+  return `task/${id}${words ? `-${words}` : ''}`;
 }
 
 export interface TaskCreate {
@@ -96,7 +138,42 @@ export class TaskService {
     private readonly projects: ProjectService,
   ) {}
 
+  async #noteViews(rows: TaskNoteRow[]): Promise<TaskNote[]> {
+    return Promise.all(
+      rows.map(async (n) => ({
+        id: n.id,
+        taskId: n.taskId,
+        kind: n.kind,
+        authorId: n.authorId,
+        authorName: (await this.directory.name(n.authorId)) ?? n.authorId,
+        summary: n.summary,
+        next: n.next,
+        gotchas: n.gotchas,
+        files: list(n.files),
+        toDeveloperId: n.toDeveloperId,
+        createdAt: iso(n.createdAt)!,
+      })),
+    );
+  }
+
+  async notes(taskId: number): Promise<TaskNote[]> {
+    const rows = await this.deps.db.selectFrom('taskNotes').selectAll().where('taskId', '=', taskId).orderBy('createdAt', 'desc').limit(50).execute();
+    return this.#noteViews(rows);
+  }
+
   async view(rows: TaskRow[]): Promise<Task[]> {
+    const handoffs = new Map<number, TaskNote>();
+    if (rows.length) {
+      const notes = await this.deps.db
+        .selectFrom('taskNotes')
+        .selectAll()
+        .where('taskId', 'in', rows.map((r) => r.id))
+        .where('kind', '=', 'handoff')
+        .orderBy('createdAt', 'desc')
+        .execute();
+      const latest = notes.filter((n, i) => notes.findIndex((m) => m.taskId === n.taskId) === i);
+      for (const note of await this.#noteViews(latest)) handoffs.set(note.taskId, note);
+    }
     const agentIds = [...new Set(rows.map((r) => r.agentId).filter((id): id is string => !!id))];
     const online = new Map<string, boolean>();
     if (agentIds.length) {
@@ -131,7 +208,14 @@ export class TaskService {
         claimedAt: iso(row.claimedAt),
         completedAt: iso(row.completedAt),
         version: row.version,
-        stale: OWNED_STATUSES.includes(row.status as TaskStatus) && row.status !== 'review' && (!row.agentId || online.get(row.agentId) !== true),
+        // Handed to someone whose agent has not picked it up yet: waiting, not abandoned.
+        stale:
+          OWNED_STATUSES.includes(row.status as TaskStatus) &&
+          row.status !== 'review' &&
+          !(row.agentId == null && handoffs.get(row.id)?.toDeveloperId === row.ownerId) &&
+          (!row.agentId || online.get(row.agentId) !== true),
+        suggestedBranch: row.branch ?? branchFor(row.id, row.title),
+        lastHandoff: handoffs.get(row.id) ?? null,
       })),
     );
   }
@@ -459,6 +543,77 @@ export class TaskService {
       importance: 2,
     });
     await this.activity.publish('task_completed', row.projectId, actor, task, activity);
+    return task;
+  }
+
+  /**
+   * Hands a task over: stores where things stand (summary, next steps, gotchas), then either
+   * gives it to another developer (`to`) or puts it back on the board. The next agent sees the
+   * note in its sync packet and on the task.
+   */
+  async handoff(actor: Actor, taskId: number, input: HandoffInput): Promise<Task> {
+    const row = await this.#rowFor(actor, taskId);
+    if (!this.#canManage(actor, row)) throw forbidden(`Task #${taskId} belongs to ${await this.directory.name(row.ownerId)}.`);
+    if (row.status === 'done') throw conflict(`Task #${taskId} is already done.`);
+    if (!input.summary?.trim()) throw invalid('Say where you got to (summary)');
+    let to: string | null = null;
+    if (input.to) {
+      const developer = (await this.directory.get(input.to)) ?? (await this.directory.byGithubLogin(input.to));
+      if (!developer || developer.disabled) throw notFound(`Developer "${input.to}"`);
+      if (developer.projectIds && !developer.projectIds.includes(row.projectId)) throw invalid(`${developer.displayName} has no access to this project`);
+      to = developer.id;
+    }
+    const now = this.deps.clock.now();
+    await this.deps.db
+      .insertInto('taskNotes')
+      .values({
+        taskId,
+        projectId: row.projectId,
+        kind: 'handoff',
+        authorId: actor.developerId,
+        agentId: actor.agentId,
+        summary: truncate(input.summary, 2000),
+        next: input.next ? truncate(input.next, 2000) : null,
+        gotchas: input.gotchas ? truncate(input.gotchas, 2000) : null,
+        files: toJson(uniquePaths(input.files ?? []).slice(0, 50)),
+        toDeveloperId: to,
+        createdAt: now,
+      })
+      .execute();
+    const updated = await this.deps.db
+      .updateTable('tasks')
+      .set({
+        status: to && to !== actor.developerId ? 'claimed' : 'available',
+        ownerId: to && to !== actor.developerId ? to : null,
+        agentId: null,
+        claimedAt: to ? now : null,
+        blockedReason: null,
+        updatedAt: now,
+        version: row.version + 1,
+      })
+      .where('id', '=', taskId)
+      .where('version', '=', row.version)
+      .returningAll()
+      .executeTakeFirst();
+    if (!updated) throw conflict(`Task #${taskId} changed at the same time; retry.`);
+    if (row.agentId) await this.hooks.setAgentTask(row.agentId, null, 'idle');
+    if (!input.keepReservations) await this.hooks.releaseTaskReservations(actor, row.projectId, taskId, 'task handed off');
+    const task = await this.#one(updated);
+    const toName = to ? await this.directory.name(to) : null;
+    const activity = await this.activity.record({
+      projectId: row.projectId,
+      actor,
+      kind: 'task',
+      summary: `handed off #${taskId} "${row.title}"${toName ? ` to ${toName}` : ' back to the board'}: ${truncate(input.summary, 160)}`,
+      refType: 'task',
+      refId: taskId,
+      importance: 2,
+    });
+    await this.activity.publish('task_handoff', row.projectId, actor, { task, note: task.lastHandoff }, activity);
+    if (to && to !== actor.developerId) {
+      const next = input.next ? ` Next: ${truncate(input.next, 300)}` : '';
+      await this.hooks.notify(actor, row.projectId, to, 'handoff', `Handing you #${taskId} "${row.title}". Where it stands: ${truncate(input.summary, 400)}.${next}`, taskId);
+    }
     return task;
   }
 

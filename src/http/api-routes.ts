@@ -36,6 +36,22 @@ export function apiRoutes(services: Services): Router {
     ok(res, { developer, key, scopes: actor.scopes, projectIds: actor.projectIds, viaSession: !!req.viaCookie });
   });
 
+  router.patch('/api/me', async (req, res) => {
+    const actor = requireActor(req);
+    requireScope(actor, 'write');
+    const body = parse(z.object({ displayName: z.string().min(1).max(60).optional(), discordUserId: z.string().max(30).nullable().optional() }), req.body);
+    await services.accounts.updateDeveloper(actor.developerId, body);
+    ok(res, await services.directory.get(actor.developerId));
+  });
+
+  router.get('/api/digests', async (req, res) => {
+    const actor = requireActor(req);
+    requireScope(actor, 'read');
+    const project = queryString(req, 'project');
+    if (!project) throw invalid('Pass ?project=<id>');
+    ok(res, await services.summary.listDigests(actor, project, Number(queryString(req, 'limit') ?? 10)));
+  });
+
   // ---- tools over HTTP --------------------------------------------------------------------------
 
   router.get('/api/tools', (req, res) => {

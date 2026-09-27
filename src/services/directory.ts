@@ -9,6 +9,7 @@ export interface Developer {
   role: 'admin' | 'member';
   projectIds: string[] | null;
   disabled: boolean;
+  discordUserId: string | null;
 }
 
 /** Small cached directory of developers and GitHub logins (a team is a handful of people). */
@@ -67,5 +68,6 @@ export function toDeveloper(row: DeveloperRow): Developer {
     role: row.role,
     projectIds: parseJson<string[] | null>(row.projectIds, null),
     disabled: row.disabledAt != null,
+    discordUserId: row.discordUserId ?? null,
   };
 }

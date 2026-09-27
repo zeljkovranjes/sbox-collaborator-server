@@ -5,7 +5,7 @@ import { gitTools } from './git.js';
 import { projectTools } from './projects.js';
 import type { AnyTool } from './registry.js';
 import { taskTools } from './tasks.js';
-import { activityTools, changeTools, decisionTools, knowledgeTools, messageTools, testTools } from './team.js';
+import { activityTools, catchUpTools, changeTools, decisionTools, knowledgeTools, messageTools, testTools } from './team.js';
 
 export const ALL_TOOLS: AnyTool[] = [
   ...projectTools,
@@ -20,6 +20,7 @@ export const ALL_TOOLS: AnyTool[] = [
   ...knowledgeTools,
   ...testTools,
   ...activityTools,
+  ...catchUpTools,
 ];
 
 export const TOOLS_BY_NAME = new Map(ALL_TOOLS.map((tool) => [tool.name, tool]));

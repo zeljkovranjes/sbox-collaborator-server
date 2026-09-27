@@ -20,13 +20,15 @@ import { MessageService } from './messages.js';
 import { ProjectService } from './projects.js';
 import { ReservationService } from './reservations.js';
 import { SyncService } from './sync.js';
+import { SummaryService } from './summary.js';
+import { DiscordNotifier } from './notifications.js';
 import { TaskService } from './tasks.js';
 import { TestService } from './tests.js';
 import { WebhookService } from './webhooks.js';
 
 export type Services = ReturnType<typeof createServices>;
 
-export function createServices(options: { config: Config; database: DatabaseHandle; clock?: Clock; github?: GitHubClient; bus?: EventBus }) {
+export function createServices(options: { config: Config; database: DatabaseHandle; clock?: Clock; github?: GitHubClient; bus?: EventBus; fetch?: typeof fetch }) {
   const deps: Deps = {
     db: options.database.db,
     database: options.database,
@@ -51,6 +53,8 @@ export function createServices(options: { config: Config; database: DatabaseHand
   const git = new GitService(deps, directory, activity, projects, agents, tasks, tests, github);
   const webhooks = new WebhookService(deps, directory, activity, projects, agents, tasks, reservations, assets, git, messages);
   const sync = new SyncService(deps, directory, { activity, agents, changes, decisions, git, knowledge, messages, projects, reservations, tasks, tests });
+  const summary = new SummaryService(deps, directory, activity, projects, reservations, assets);
+  const discord = new DiscordNotifier(deps, directory, projects, options.fetch ?? fetch);
   const accounts = new AccountService(deps, directory);
   const sessions = new SessionService(deps, directory);
   const device = new DeviceAuthService(deps, accounts);
@@ -92,5 +96,5 @@ export function createServices(options: { config: Config; database: DatabaseHand
         .catch(quiet('broken build warning')),
   };
 
-  return { deps, github, directory, activity, projects, agents, tasks, reservations, messages, decisions, knowledge, changes, tests, assets, git, webhooks, sync, accounts, sessions, device };
+  return { deps, github, directory, activity, projects, agents, tasks, reservations, messages, decisions, knowledge, changes, tests, assets, git, webhooks, sync, summary, discord, accounts, sessions, device };
 }

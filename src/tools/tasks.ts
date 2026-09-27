@@ -55,12 +55,13 @@ export const taskTools = [
     input: { taskId: taskIdArg },
     handler: async (ctx, a) => {
       const task = await ctx.services.tasks.get(ctx.actor, a.taskId);
-      const [dependencies, reservations, changes] = await Promise.all([
+      const [dependencies, reservations, changes, notes] = await Promise.all([
         task.dependsOn.length ? Promise.all(task.dependsOn.map((id) => ctx.services.tasks.get(ctx.actor, id).then((t) => ({ id: t.id, title: t.title, status: t.status })).catch(() => ({ id, missing: true })))) : [],
         ctx.services.reservations.list(ctx.actor, task.projectId).then((all) => all.filter((r) => r.taskId === task.id)),
         ctx.services.deps.db.selectFrom('changes').selectAll().where('taskId', '=', task.id).orderBy('startedAt', 'desc').limit(10).execute().then((rows) => ctx.services.changes.view(rows)),
+        ctx.services.tasks.notes(task.id),
       ]);
-      return { ...task, dependencies, reservations, changes };
+      return { ...task, dependencies, reservations, changes, notes };
     },
   }),
   defineTool({
@@ -73,7 +74,11 @@ export const taskTools = [
     input: { taskId: taskIdArg, branch: z.string().max(200).optional(), force: z.boolean().optional(), reason: z.string().max(500).optional() },
     handler: async (ctx, a) => {
       const { task, warnings } = await ctx.services.tasks.claim(ctx.actor, a.taskId, a);
-      return { ...task, ...(warnings.length ? { warnings } : {}), next: 'Reserve the files you will change (file_reserve) and set status (agent_set_status).' };
+      return {
+        ...task,
+        ...(warnings.length ? { warnings } : {}),
+        next: `Work on branch ${task.suggestedBranch} (git switch -c ${task.suggestedBranch} if it does not exist), reserve the files you will change (file_reserve) and set status (agent_set_status).${task.lastHandoff ? ' Read lastHandoff: where the previous owner got to.' : ''}`,
+      };
     },
   }),
   defineTool({
@@ -119,6 +124,27 @@ export const taskTools = [
     core: true,
     input: { taskId: taskIdArg, reason: z.string().max(500).optional(), status: z.enum(['available', 'backlog']).optional() },
     handler: (ctx, a) => ctx.services.tasks.release(ctx.actor, a.taskId, a),
+  }),
+  defineTool({
+    name: 'task_handoff',
+    title: 'Hand off task',
+    description:
+      'Stop working on a task without finishing it: record where you got to (summary), what comes next and gotchas, then give it to a teammate (to = developer id) or back to the board. The next agent sees the note on sync and on the task. Releases the reservations made for the task unless keepReservations.',
+    scope: 'write',
+    core: true,
+    input: {
+      taskId: taskIdArg,
+      summary: z.string().min(1).max(2000).describe('Where you got to'),
+      next: z.string().max(2000).optional().describe('What should happen next'),
+      gotchas: z.string().max(2000).optional().describe('Traps, half-done bits, things to know'),
+      files: files.optional(),
+      to: z.string().max(60).optional().describe('Developer id to hand it to; omit to put it back on the board'),
+      keepReservations: z.boolean().optional(),
+    },
+    handler: (ctx, a) => {
+      const { taskId, ...input } = a;
+      return ctx.services.tasks.handoff(ctx.actor, taskId, input);
+    },
   }),
   defineTool({
     name: 'task_complete',

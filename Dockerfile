@@ -20,6 +20,7 @@ RUN apk add --no-cache tini
 COPY --from=build --chown=node:node /app/package.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
+COPY --chown=node:node clients ./clients
 # SQLite fallback data lives here when DATABASE_URL is not set.
 RUN mkdir -p /app/data && chown node:node /app/data
 USER node

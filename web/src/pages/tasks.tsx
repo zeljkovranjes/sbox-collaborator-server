@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
-import { api, type Change, type Me, type Project, type Reservation, type Task } from '../api';
-import { ago, Avatar, Empty, Icon, Loading, Modal, Pill, useAction, useLoad } from '../lib';
+import { api, type Change, type Me, type Project, type Reservation, type Task, type TaskNote } from '../api';
+import { ago, Avatar, Empty, Icon, Loading, Modal, Pill, Secret, useAction, useLoad } from '../lib';
 
 const COLUMNS: { status: string[]; title: string; icon: string }[] = [
   { status: ['backlog'], title: 'Backlog', icon: 'inventory_2' },
@@ -10,7 +10,7 @@ const COLUMNS: { status: string[]; title: string; icon: string }[] = [
   { status: ['done'], title: 'Done', icon: 'task_alt' },
 ];
 
-type TaskDetail = Task & { dependencies: { id: number; title?: string; status?: string }[]; reservations: Reservation[]; changes: Change[] };
+type TaskDetail = Task & { dependencies: { id: number; title?: string; status?: string }[]; reservations: Reservation[]; changes: Change[]; notes: TaskNote[] };
 
 export function TasksPage({ project, me }: { project: Project; me: Me }) {
   const [query, setQuery] = useState('');
@@ -62,6 +62,11 @@ export function TasksPage({ project, me }: { project: Project; me: Me }) {
                           {t.ownerId && <Avatar id={t.ownerId} name={t.ownerName ?? t.ownerId} size="sm" />}
                         </div>
                         {t.blockedReason && <div class="small red" style="margin-top:6px">{t.blockedReason}</div>}
+                        {t.lastHandoff && t.status !== 'done' && (
+                          <div class="small yellow" style="margin-top:6px">
+                            <Icon name="swap_horiz" style="font-size:14px;vertical-align:-2px" /> {t.lastHandoff.authorName}: {t.lastHandoff.summary.slice(0, 80)}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -79,6 +84,12 @@ export function TasksPage({ project, me }: { project: Project; me: Me }) {
 
 function TaskModal({ id, me, onClose }: { id: number; me: Me; onClose: () => void }) {
   const task = useLoad(() => api.tool<TaskDetail>('task_get', { taskId: id }), [id]);
+  const [handoff, setHandoff] = useState(false);
+  const project = task.data?.projectId;
+  const team = useLoad(
+    () => (project ? api.get<{ team: { developer: { id: string; displayName: string } }[] }>(`/api/overview?project=${encodeURIComponent(project)}`) : Promise.resolve(null)),
+    [project],
+  );
   const act = useAction();
   const t = task.data;
   const mine = t?.ownerId === me.developer.id;
@@ -86,6 +97,17 @@ function TaskModal({ id, me, onClose }: { id: number; me: Me; onClose: () => voi
     if (await act(() => api.tool(tool, { taskId: id, ...args }), message)) task.reload();
   };
   return (
+    <>
+      {handoff && t && (
+        <HandoffModal
+          task={t}
+          teammates={(team.data?.team ?? []).map((x) => x.developer).filter((d) => d.id !== me.developer.id)}
+          onClose={(done) => {
+            setHandoff(false);
+            if (done) onClose();
+          }}
+        />
+      )}
     <Modal title={t ? `#${t.id} ${t.title}` : 'Task'} icon="task_alt" onClose={onClose} wide>
       {!t ? (
         <Loading />
@@ -104,6 +126,31 @@ function TaskModal({ id, me, onClose }: { id: number; me: Me; onClose: () => voi
             <div class="banner red">
               <Icon name="block" />
               {t.blockedReason}
+            </div>
+          )}
+          {t.notes.filter((n) => n.kind === 'handoff').slice(0, 3).map((n) => (
+            <div class="banner yellow" key={n.id}>
+              <Icon name="swap_horiz" />
+              <div class="grow small" style="color:var(--text)">
+                <b>Handoff from {n.authorName}</b> <span class="muted">· {ago(n.createdAt)}</span>
+                <div>{n.summary}</div>
+                {n.next && (
+                  <div>
+                    <span class="muted">Next:</span> {n.next}
+                  </div>
+                )}
+                {n.gotchas && (
+                  <div>
+                    <span class="muted">Gotchas:</span> {n.gotchas}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {t.status !== 'done' && (
+            <div class="field">
+              <label>Branch</label>
+              <Secret value={`git switch -c ${t.suggestedBranch}`} />
             </div>
           )}
           {t.completionSummary && (
@@ -169,6 +216,9 @@ function TaskModal({ id, me, onClose }: { id: number; me: Me; onClose: () => voi
                 >
                   <Icon name="block" /> Block
                 </button>
+                <button class="btn" onClick={() => setHandoff(true)}>
+                  <Icon name="swap_horiz" /> Hand off
+                </button>
                 <button class="btn ghost" onClick={() => run('task_release', {}, 'Released')}>
                   Release
                 </button>
@@ -188,6 +238,60 @@ function TaskModal({ id, me, onClose }: { id: number; me: Me; onClose: () => voi
           </div>
         </>
       )}
+    </Modal>
+    </>
+  );
+}
+
+function HandoffModal({ task, teammates, onClose }: { task: Task; teammates: { id: string; displayName: string }[]; onClose: (done: boolean) => void }) {
+  const [summary, setSummary] = useState('');
+  const [next, setNext] = useState('');
+  const [gotchas, setGotchas] = useState('');
+  const [to, setTo] = useState('');
+  const act = useAction();
+  const save = async () => {
+    const ok = await act(() => api.tool('task_handoff', { taskId: task.id, summary, ...(next ? { next } : {}), ...(gotchas ? { gotchas } : {}), ...(to ? { to } : {}) }), 'Handed off');
+    if (ok) onClose(true);
+  };
+  return (
+    <Modal
+      title={`Hand off #${task.id}`}
+      icon="swap_horiz"
+      onClose={() => onClose(false)}
+      footer={
+        <>
+          <button class="btn ghost" onClick={() => onClose(false)}>
+            Cancel
+          </button>
+          <button class="btn primary" disabled={!summary.trim()} onClick={save}>
+            Hand off
+          </button>
+        </>
+      }
+    >
+      <div class="field">
+        <label>Where you got to</label>
+        <textarea class="textarea" value={summary} onInput={(e) => setSummary((e.target as HTMLTextAreaElement).value)} autoFocus />
+      </div>
+      <div class="field">
+        <label>What comes next</label>
+        <textarea class="textarea" style="min-height:60px" value={next} onInput={(e) => setNext((e.target as HTMLTextAreaElement).value)} />
+      </div>
+      <div class="field">
+        <label>Gotchas</label>
+        <input class="input" value={gotchas} onInput={(e) => setGotchas((e.target as HTMLInputElement).value)} placeholder="Half-done bits, traps, where to test" />
+      </div>
+      <div class="field">
+        <label>Give it to</label>
+        <select class="select" value={to} onChange={(e) => setTo((e.target as HTMLSelectElement).value)}>
+          <option value="">Nobody – back to the board</option>
+          {teammates.map((d) => (
+            <option value={d.id} key={d.id}>
+              {d.displayName}
+            </option>
+          ))}
+        </select>
+      </div>
     </Modal>
   );
 }

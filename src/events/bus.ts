@@ -27,6 +27,8 @@ export const EVENT_TYPES = [
   'build_broken',
   'asset_changed',
   'project_updated',
+  'task_handoff',
+  'digest_created',
   'activity',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];

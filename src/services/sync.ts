@@ -252,8 +252,12 @@ export class SyncService {
     if (r.mine.length) lines.push(`Your reservations: ${r.mine.map((x) => x.path).join(', ')}`);
 
     const taskLine = (t: Task) =>
-      `- #${t.id} [${t.status}${t.priority !== 'normal' ? `, ${t.priority}` : ''}] ${t.title}${t.ownerName ? ` – ${t.ownerName}` : ''}${t.branch ? ` @${t.branch}` : ''}${t.stale ? ' (owner offline)' : ''}${t.blockedReason ? ` – blocked: ${t.blockedReason}` : ''}`;
-    if (packet.myTasks.length) lines.push('', '## Your tasks', ...packet.myTasks.map(taskLine));
+      `- #${t.id} [${t.status}${t.priority !== 'normal' ? `, ${t.priority}` : ''}] ${t.title}${t.ownerName ? ` – ${t.ownerName}` : ''}${t.branch ? ` @${t.branch}` : ''}${t.stale ? ' (owner offline)' : ''}${t.blockedReason ? ` – blocked: ${t.blockedReason}` : ''}` +
+      (t.lastHandoff ? `
+  handoff from ${t.lastHandoff.authorName}: ${truncate(t.lastHandoff.summary, 200)}${t.lastHandoff.next ? ` → next: ${truncate(t.lastHandoff.next, 160)}` : ''}${t.lastHandoff.gotchas ? ` ⚠ ${truncate(t.lastHandoff.gotchas, 160)}` : ''}` : '');
+    const myTaskLine = (t: Task) => `${taskLine(t)}
+  branch: ${t.suggestedBranch}`;
+    if (packet.myTasks.length) lines.push('', '## Your tasks', ...packet.myTasks.map(myTaskLine));
     if (packet.othersTasks.length) lines.push('', '## Teammates are working on', ...packet.othersTasks.map(taskLine));
     lines.push('', `## Available tasks${packet.moreAvailableTasks ? ` (top ${packet.availableTasks.length}, ${packet.moreAvailableTasks} more)` : ''}`);
     if (!packet.availableTasks.length) lines.push('- none');

@@ -1,85 +1,103 @@
 <p align="center"><img src="web/public/logo.svg" width="96" alt=""></p>
 
-# s&box Collaborator – MCP collaboration server
+# s&box Collaborator – server
 
-A self-hosted MCP server that makes the coding agents of a small s&box team (Claude Code, Codex
-CLI, Cursor, OpenCode, anything MCP) behave like members of the same team. It keeps structured
-shared state – presence, tasks, file and asset reservations, change announcements, decisions,
-knowledge, messages, build status – and ties it to your GitHub repositories. GitHub stays the
-source of truth; the server coordinates the agents around it.
+A self-hosted server that makes a small s&box team's coding agents (Claude Code, Codex, Cursor,
+OpenCode, any MCP client) and s&box editors work like one team: who's doing what, tasks, file
+reservations, API changes, handoffs, build results and "what changed while you were away" –
+with GitHub as the source of truth. Pairs with the
+[Collaborator s&box library](https://github.com/zeljkovranjes/sbox-collaborator).
 
-Pairs with the **collaborator** s&box editor library (`01_Libraries/collaborator`), which shows
-the team inside the editor, reserves assets from the asset browser and uploads the real engine
-asset dependency graph.
+## Setup (about 15 minutes)
 
-## Features
+You need: a small Linux server with Docker (1 GB RAM is plenty), a domain name pointing at it
+(e.g. `mcp.example.com`), and a GitHub account.
 
-- **Projects** – multiple s&box games/libraries: repos, package ident, architecture summary,
-  conventions, milestone, important directories.
-- **Presence** – every agent registers (client, model, machine, branch, files, status) with
-  heartbeats; offline detection.
-- **Task board** – atomic claiming (no silent double claims), blocking, release, completion,
-  dependencies, GitHub issue/PR links, stale-owner takeover with notification.
-- **File & asset reservations** – files and directories, advisory, conflict warnings naming the
-  owner and task, expiry, automatic release when agents disappear.
-- **s&box asset awareness** – `.vmdl`, `.vmat`, `.vtex`, `.shader`, `.sound`, `.scene`,
-  `.prefab`, `.animgraph`, source models, textures, audio… with dependency/reference trees.
-- **GitHub** – webhooks for pushes, branches, PRs, reviews, merges, issues, correlated with
-  developers, agents, tasks and reserved files; API access for commits, diffs, issues, PRs.
-- **Change announcements** – files, APIs added/removed/renamed, behavior and breaking changes,
-  tests, known issues, follow-ups – automatically in teammates' next context sync.
-- **Decisions, knowledge, messages, build/test events, activity feed.**
-- **`project_sync_context`** – one compact, relevance-ranked, time-compacted packet to start work.
-- **Team notices** – tool results carry short nudges (unread blockers, breaking changes, broken
-  builds) so agents notice without polling or chatting.
-- **Dashboard** – live (SSE) overview of who is online and doing what, reservations, commits,
-  blockers, tasks, assets, decisions, knowledge, messages.
-- **Auth** – join with *server address → server key → GitHub login*; per-device access keys
-  with scopes (read-only), project limits and revocation; nothing sensitive stored in plaintext.
-
-## Quick start
+**1. Get the code and create your settings file**
 
 ```sh
-cp .env.example .env              # fill in, see docs/deployment.md
+git clone https://github.com/zeljkovranjes/sbox-collaborator-server.git
+cd sbox-collaborator-server
+cp .env.example .env
+```
+
+**2. Fill in `.env`** (open it in any editor)
+
+| setting | what to put |
+|---|---|
+| `PUBLIC_URL` | `https://mcp.example.com` (your domain) |
+| `COLLAB_DOMAIN` | `mcp.example.com` |
+| `SECRET_KEY` | run `openssl rand -hex 32` and paste the result |
+| `POSTGRES_PASSWORD` | run `openssl rand -hex 24` and paste the result |
+| `ADMIN_GITHUB_LOGINS` | your GitHub username (you become the admin) |
+
+**3. Create a GitHub login app** – GitHub ▸ Settings ▸ Developer settings ▸ OAuth Apps ▸
+*New OAuth App*:
+- Homepage URL: `https://mcp.example.com`
+- Authorization callback URL: `https://mcp.example.com/auth/github/callback`
+
+Copy the *Client ID* and a new *Client secret* into `GITHUB_OAUTH_CLIENT_ID` and
+`GITHUB_OAUTH_CLIENT_SECRET` in `.env`.
+
+**4. Start it** (HTTPS certificates are set up automatically):
+
+```sh
 docker compose --profile caddy up -d --build
 ```
 
-Then open `https://your-domain`, sign in with GitHub, create a project and invite your teammate.
+Open `https://mcp.example.com`, click *I already have an account ▸ Continue with GitHub*. You're
+the admin.
 
-Local, without Docker (SQLite):
+**5. Create your project** – *Server admin ▸ Project*: a name and your GitHub repo (`you/my-game`).
 
-```sh
-npm install
-SECRET_KEY=$(openssl rand -hex 32) ADMIN_GITHUB_LOGINS=you npm run dev
-```
+**6. Invite your teammate** – *Server admin ▸ Invite teammate*, enter their GitHub username. Send
+them the **server address** and the **server key** it shows (privately, it's single use).
+
+**7. Connect your coding agents** – avatar menu ▸ *Connect agents & keys* ▸ *New access key*,
+then copy the ready-made setup for Claude Code, Codex, Cursor or OpenCode shown on that page.
+Add [clients/AGENTS.md](clients/AGENTS.md) to your game repo's `CLAUDE.md` / `AGENTS.md` so the
+agents follow the team workflow.
+
+Done. Your teammate joins from the s&box editor (View ▸ Collaborator) or the website with the
+address + server key + GitHub login.
+
+## Optional extras
+
+| want | how |
+|---|---|
+| commits, pull requests and issues show up live | [GitHub webhook](docs/github-webhooks.md) + `GITHUB_TOKEN` and `GITHUB_WEBHOOK_SECRET` in `.env` |
+| Discord pings for blockers, broken builds, handoffs, messages | paste a Discord webhook URL in *Project ▸ Discord notifications* ([details](docs/notifications.md)) |
+| warn/block commits that touch a teammate's reserved files | the [git hook](docs/git-hooks.md) |
+| nightly backups | `./scripts/backup.sh` in cron ([details](docs/deployment.md#backups)) |
+
+Updating later: `git pull && docker compose --profile caddy up -d --build`.
+
+## What's inside
+
+- **For agents (MCP, 64 tools):** start-of-work context sync, catch-up, atomic task claiming,
+  file/asset reservations, handoffs with notes, change announcements (API and breaking changes),
+  decisions, knowledge, messages, build/test results, file history, GitHub and s&box asset tools.
+- **Dashboard:** who's online and doing what, tasks, reservations, assets, git, decisions,
+  knowledge, messages, activity, weekly digest.
+- **Security:** GitHub login plus single-use server keys to join, per-device access keys
+  (read-only possible, revocable), nothing secret stored in plain text. See [docs/security.md](docs/security.md).
 
 ## Documentation
 
-| | |
-|---|---|
-| [docs/deployment.md](docs/deployment.md) | Docker, HTTPS, reverse proxy, first admin, backups, upgrades |
-| [docs/configuration.md](docs/configuration.md) | environment variables |
-| [docs/github-webhooks.md](docs/github-webhooks.md) | webhook setup and what it does |
-| [docs/mcp-tools.md](docs/mcp-tools.md) | all 60 MCP tools |
-| [docs/http-api.md](docs/http-api.md) | HTTP API, device sign-in, realtime events |
-| [docs/developer-workflow.md](docs/developer-workflow.md) | how the team and agents work with it |
-| [docs/security.md](docs/security.md) | credentials, permissions, hardening |
-| [docs/database.md](docs/database.md) | schema, migrations, concurrency |
-| [clients/](clients) | Claude Code, Codex, Cursor, OpenCode configs and the agent instruction file |
+[Deployment](docs/deployment.md) · [Configuration](docs/configuration.md) ·
+[MCP tools](docs/mcp-tools.md) · [HTTP API](docs/http-api.md) ·
+[Developer workflow](docs/developer-workflow.md) · [GitHub webhooks](docs/github-webhooks.md) ·
+[Git hook](docs/git-hooks.md) · [Discord & digests](docs/notifications.md) ·
+[Security](docs/security.md) · [Database](docs/database.md) · [Client setup](clients/README.md)
 
 ## Development
 
 ```sh
-npm run dev         # API + MCP on :8080 (tsx watch)
-npm run dev:web     # dashboard on :5173 with proxy
-npm test            # vitest – SQLite and PostgreSQL (PGlite)
-npm run typecheck
-npm run build       # dist/src (server) + dist/web (dashboard)
+npm install
+SECRET_KEY=$(openssl rand -hex 32) npm run dev   # http://localhost:8080, SQLite
+npm run dev:web                                 # dashboard with hot reload
+npm test                                        # SQLite + PostgreSQL test suites
 ```
-
-Layout: `src/services` (domain logic), `src/tools` (MCP tool definitions, shared with
-`POST /api/tools/<name>`), `src/mcp` (Streamable HTTP transport), `src/http` (API, auth, SSE,
-webhooks), `src/db` (schema, migrations), `web/` (Preact dashboard), `test/`.
 
 ## License
 

@@ -65,6 +65,7 @@ function Shell({ me }: { me: Me }) {
   const { tick, live } = useRealtime(projectId, (type, data) => {
     if (type === 'message_received' && data?.toDeveloperId === me.developer.id) toast('info', `Message from ${data.fromName}: ${String(data.body).slice(0, 80)}`);
     if (type === 'build_broken') toast('error', `Build broken: ${data?.description ?? ''}`);
+    if (type === 'task_handoff' && data?.note?.toDeveloperId === me.developer.id) toast('info', `${data.note.authorName} handed you #${data.task.id} ${data.task.title}`);
   });
   const overview = useLoad(() => (projectId ? api.get<Overview>(`/api/overview?project=${encodeURIComponent(projectId)}`) : Promise.resolve(undefined)), [projectId, tick]);
 

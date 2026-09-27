@@ -14,6 +14,7 @@ export function ProjectPage({ project, reload }: { project: Project; reload: () 
     conventions: project.conventions,
     structure: project.structure,
     dirs: project.importantDirs.map((d) => `${d.path} – ${d.description}`).join('\n'),
+    discord: '',
   });
   const [dirty, setDirty] = useState(false);
   const act = useAction();
@@ -44,6 +45,7 @@ export function ProjectPage({ project, reload }: { project: Project; reload: () 
           conventions: form.conventions,
           structure: form.structure,
           importantDirs,
+          ...(form.discord.trim() ? { discordWebhookUrl: form.discord.trim() } : {}),
         }),
       'Project context saved – every agent sees it on its next sync',
     );
@@ -119,6 +121,21 @@ export function ProjectPage({ project, reload }: { project: Project; reload: () 
             <div class="field">
               <label>Package ident</label>
               <input class="input mono" value={form.packageIdent} onInput={set('packageIdent')} placeholder="myorg.sailing" />
+            </div>
+            <div class="field">
+              <label>Discord notifications {project.discordConfigured ? <span class="pill green">on</span> : <span class="pill ghost">off</span>}</label>
+              <input class="input mono" type="password" autoComplete="off" value={form.discord} onInput={set('discord')} placeholder={project.discordConfigured ? 'webhook set – paste a new one to replace' : 'https://discord.com/api/webhooks/…'} />
+              <span class="tiny faint">Blockers, broken builds, handoffs, direct messages and the weekly digest. Stored encrypted.</span>
+              {project.discordConfigured && (
+                <button
+                  type="button"
+                  class="linkish tiny"
+                  style="align-self:flex-start"
+                  onClick={async () => (await act(() => api.tool('project_update_context', { project: project.id, discordWebhookUrl: '' }), 'Discord notifications turned off')) && reload()}
+                >
+                  turn off
+                </button>
+              )}
             </div>
             <div class="field">
               <label>GitHub repositories</label>

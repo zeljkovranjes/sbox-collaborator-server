@@ -49,6 +49,14 @@ export function createApp({ services, mcp, version, startedAt }: AppOptions) {
     res.status(db ? 200 : 503).json({ ok: db, db, version, uptimeSeconds: Math.round((Date.now() - startedAt) / 1000), mcpSessions: mcp.sessionCount });
   });
 
+  // ---- git hook script (public: it contains no secrets; keys come from the developer's env) --------
+  app.get('/hooks/collab-check.mjs', (_req, res) => {
+    const file = join(process.cwd(), 'clients', 'git-hooks', 'collab-check.mjs');
+    if (!existsSync(file)) return res.status(404).type('text').send('hook script not found on this server');
+    res.type('text/javascript').setHeader('cache-control', 'no-cache');
+    return res.sendFile(file);
+  });
+
   // ---- GitHub webhooks (raw body for signature verification) -------------------------------------
   app.post('/webhooks/github', express.raw({ type: '*/*', limit: '25mb' }), async (req, res) => {
     const secret = config.github.webhookSecret;

@@ -3,6 +3,7 @@ import type { ProjectRow } from '../db/schema.js';
 import { conflict, invalid, notFound } from '../lib/errors.js';
 import { parseJson, toJson } from '../lib/json.js';
 import { iso } from '../lib/time.js';
+import { SecretBox } from '../lib/crypto.js';
 import type { ActivityService } from './activity.js';
 import { canAccessProject, requireProjectAccess, type Actor, type Deps } from './context.js';
 
@@ -23,6 +24,8 @@ export interface Project {
   milestone: string;
   importantDirs: ImportantDir[];
   structure: string;
+  /** A Discord webhook is set for this project (the URL itself is never returned). */
+  discordConfigured: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -41,7 +44,7 @@ export interface ProjectInput {
   structure?: string;
 }
 
-export type ProjectPatch = Partial<Omit<ProjectInput, 'id'>>;
+export type ProjectPatch = Partial<Omit<ProjectInput, 'id'>> & { discordWebhookUrl?: string | null };
 
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
@@ -56,11 +59,23 @@ export function parseRepo(fullName: string): { owner: string; name: string } {
   return { owner, name };
 }
 
+const DISCORD_WEBHOOK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/;
+
 export class ProjectService {
+  readonly #box: SecretBox;
+
   constructor(
     private readonly deps: Deps,
     private readonly activity: ActivityService,
-  ) {}
+  ) {
+    this.#box = new SecretBox(deps.config.secretKey, 'discord-webhook');
+  }
+
+  /** The Discord webhook for a project: its own, else the server default. */
+  async discordWebhook(projectId: string): Promise<string | null> {
+    const row = await this.deps.db.selectFrom('projects').select('discordWebhook').where('id', '=', projectId).executeTakeFirst();
+    return this.#box.open(row?.discordWebhook) ?? this.deps.config.discordWebhookUrl;
+  }
 
   async #view(row: ProjectRow): Promise<Project> {
     const repos = await this.deps.db
@@ -81,6 +96,7 @@ export class ProjectService {
       milestone: row.milestone,
       importantDirs: parseJson<ImportantDir[]>(row.importantDirs, []),
       structure: row.structure,
+      discordConfigured: !!row.discordWebhook,
       createdAt: iso(row.createdAt)!,
       updatedAt: iso(row.updatedAt)!,
     };
@@ -166,6 +182,12 @@ export class ProjectService {
           values[key] = patch[key];
           changed.push(key);
         }
+      }
+      if (patch.discordWebhookUrl !== undefined) {
+        const url = patch.discordWebhookUrl?.trim() ?? '';
+        if (url && !DISCORD_WEBHOOK.test(url)) throw invalid('That is not a Discord webhook URL (https://discord.com/api/webhooks/…)');
+        values.discordWebhook = url ? this.#box.seal(url) : null;
+        changed.push('discord');
       }
       if (patch.importantDirs !== undefined) {
         values.importantDirs = toJson(patch.importantDirs);

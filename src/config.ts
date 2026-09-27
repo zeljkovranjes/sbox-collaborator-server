@@ -27,6 +27,11 @@ export interface Config {
   webDir: string | null;
   /** GitHub logins that become admins on their first GitHub login (bootstrap). */
   adminGithubLogins: string[];
+  /** Weekly digest: day (0 Sunday … 6 Saturday, -1 = off) and local hour. */
+  digestWeekday: number;
+  digestHour: number;
+  /** Default Discord webhook for every project (a project can set its own). */
+  discordWebhookUrl: string | null;
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -100,6 +105,9 @@ export function loadConfig(env: Env = process.env): Config {
       .split(',')
       .map((login) => login.trim().toLowerCase())
       .filter(Boolean),
+    digestWeekday: int(env, 'DIGEST_WEEKDAY', 1),
+    digestHour: int(env, 'DIGEST_HOUR', 9),
+    discordWebhookUrl: secret(env, 'DISCORD_WEBHOOK_URL'),
     logLevel,
   };
 }

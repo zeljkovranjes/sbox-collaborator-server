@@ -31,6 +31,7 @@ export class Sweeper {
       const offline = await this.services.agents.sweepOffline();
       const released = await this.services.reservations.sweep();
       await this.services.device.sweep();
+      await this.services.summary.weeklyDigests();
       await this.mcp?.sweep();
       if (offline || released) log.info('sweep', { offline, released });
       return { offline, released };

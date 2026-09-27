@@ -20,6 +20,7 @@ export interface DevelopersTable {
   projectIds: Json | null;
   createdAt: Ms;
   disabledAt: Ms | null;
+  discordUserId: string | null;
 }
 
 export interface AccessKeysTable {
@@ -95,6 +96,8 @@ export interface ProjectsTable {
   createdAt: Ms;
   updatedAt: Ms;
   archivedAt: Ms | null;
+  /** Discord webhook URL, AES-GCM encrypted with a key derived from SECRET_KEY. */
+  discordWebhook: string | null;
 }
 
 export interface ProjectReposTable {
@@ -371,7 +374,41 @@ export interface ActivityTable {
   data: Json | null;
 }
 
+export interface TaskNotesTable {
+  id: Generated<number>;
+  taskId: number;
+  projectId: string;
+  kind: 'handoff' | 'note';
+  authorId: string;
+  agentId: string | null;
+  summary: string;
+  next: string | null;
+  gotchas: string | null;
+  files: Json;
+  toDeveloperId: string | null;
+  createdAt: Ms;
+}
+
+export interface CatchUpMarksTable {
+  developerId: string;
+  projectId: string;
+  at: Ms;
+}
+
+export interface DigestsTable {
+  id: Generated<number>;
+  projectId: string;
+  fromAt: Ms;
+  toAt: Ms;
+  summary: string;
+  stats: Json;
+  createdAt: Ms;
+}
+
 export interface Database {
+  taskNotes: TaskNotesTable;
+  catchUpMarks: CatchUpMarksTable;
+  digests: DigestsTable;
   developers: DevelopersTable;
   accessKeys: AccessKeysTable;
   joinKeys: JoinKeysTable;
@@ -415,3 +452,5 @@ export type MessageRow = Selectable<MessagesTable>;
 export type KnowledgeRow = Selectable<KnowledgeTable>;
 export type TestRunRow = Selectable<TestRunsTable>;
 export type ActivityRow = Selectable<ActivityTable>;
+export type TaskNoteRow = Selectable<TaskNotesTable>;
+export type DigestRow = Selectable<DigestsTable>;

@@ -56,6 +56,7 @@ export const projectTools = [
       packageIdent: z.string().max(100).optional(),
       defaultBranch: z.string().max(100).optional(),
       repos: z.array(z.string()).max(10).optional().describe('GitHub repos as owner/name'),
+      discordWebhookUrl: z.string().max(300).nullable().optional().describe('Discord webhook for this project ("" or null clears it). Stored encrypted.'),
     },
     handler: async (ctx, a) => {
       const { project, ...patch } = a;

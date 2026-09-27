@@ -16,13 +16,15 @@ of truth for code. Use the server – never make me copy context between agents 
 ### Before starting work
 1. `agent_register` – clientType (`claude-code`, `codex`, `cursor`, `opencode`), machine name,
    model, current git branch. Once per session.
-2. `project_sync_context` with `focus` = what you are about to do and `paths` = files you expect
-   to touch. Read it all: teammates' current work, reservations, breaking API changes, decisions.
+2. `team_catch_up` – what teammates did while you were away. Then `project_sync_context` with
+   `focus` = what you are about to do and `paths` = files you expect to touch. Read it all:
+   teammates' current work, reservations, breaking API changes, decisions.
 3. `message_get_unread`. Handle blockers, requests and handoffs; `message_acknowledge` them.
 4. Check the relevant decisions (in the packet; `decision_list` with a query for more). Follow
    them. If you need to break one, stop and ask me.
 5. Find the task (`task_list`) or create it (`task_create`), then `task_claim`. If the claim
-   fails because someone else owns it, do NOT do that work – tell me.
+   fails because someone else owns it, do NOT do that work – tell me. Work on the task's
+   `suggestedBranch` (`git switch -c <branch>`), and if it has a `lastHandoff`, start from there.
 6. `file_check_conflict`, then `file_reserve` the files/directories you will change (with the
    task id and a reason). Directories end with `/`.
 7. `agent_set_status` → `working`, with task, branch and the files you are editing.
@@ -36,8 +38,11 @@ of truth for code. Use the server – never make me copy context between agents 
 - Record lasting technical choices with `decision_create`; engine facts, gotchas and
   workarounds with `knowledge_add` (tags: networking, physics, rendering, shader, animation, ui,
   audio, asset, sbox-api, bug, workaround).
+- Before changing unfamiliar files, `file_history` shows who touched them, when and why.
 - If a tool result ends with `[team notices]`, read them: unread messages, breaking changes or
   broken builds from teammates.
+- Stopping before the task is done? `task_handoff` with where you got to, what comes next and
+  gotchas (optionally `to` a teammate) instead of just leaving it claimed.
 
 ### After work
 1. Build and test (compile in the s&box editor, run the relevant scene). Record it with

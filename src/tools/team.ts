@@ -250,3 +250,36 @@ export const activityTools = [
     },
   }),
 ];
+
+export const catchUpTools = [
+  defineTool({
+    name: 'team_catch_up',
+    title: 'Catch me up',
+    description:
+      'What changed while you were away: breaking/API changes, finished work, what is in progress or blocked, commits, decisions, failing builds, and what needs you (handoffs, unread messages). Compact; moves your "last caught up" marker.',
+    scope: 'read',
+    core: true,
+    input: { project, since: sinceArg },
+    handler: async (ctx, a) => {
+      const since = parseSince(a.since, ctx.services.deps.clock.now());
+      return ctx.services.summary.catchUp(ctx.actor, await projectOf(ctx, a.project), since);
+    },
+  }),
+  defineTool({
+    name: 'team_digest',
+    title: 'Team digest',
+    description: 'Team-wide summary of the last N days (default 7): what shipped, API changes, decisions, knowledge, builds.',
+    scope: 'read',
+    input: { project, days: z.number().int().min(1).max(31).optional() },
+    handler: async (ctx, a) => ctx.services.summary.digest(ctx.actor, await projectOf(ctx, a.project), a.days ?? 7),
+  }),
+  defineTool({
+    name: 'file_history',
+    title: 'File history',
+    description: 'Who touched a file or folder (trailing /), when and why: commits, change announcements, open tasks and current reservations. Check before editing unfamiliar code or assets.',
+    scope: 'read',
+    core: true,
+    input: { project, path: z.string().min(1).max(512), limit: limitArg(100) },
+    handler: async (ctx, a) => ctx.services.summary.history(ctx.actor, await projectOf(ctx, a.project), a.path, a.limit ?? 20),
+  }),
+];

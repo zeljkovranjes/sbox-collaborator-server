@@ -170,6 +170,7 @@ export function SettingsPage({ me, projects }: { me: Me; projects: Project[] }) 
                 <dt>Role</dt>
                 <dd>{me.developer.role}</dd>
               </dl>
+              <DiscordId initial={me.developer.discordUserId ?? ''} />
             </div>
           </div>
           <div class="panel">
@@ -193,6 +194,23 @@ export function SettingsPage({ me, projects }: { me: Me; projects: Project[] }) 
       </div>
       {creating && <CreateKey projects={projects} onClose={() => (setCreating(false), keys.reload())} />}
     </>
+  );
+}
+
+function DiscordId({ initial }: { initial: string }) {
+  const [value, setValue] = useState(initial);
+  const act = useAction();
+  return (
+    <div class="field" style="margin-top:14px">
+      <label>Discord user id (for @mentions)</label>
+      <div class="row">
+        <input class="input mono grow" value={value} onInput={(e) => setValue((e.target as HTMLInputElement).value)} placeholder="123456789012345678" />
+        <button class="btn" onClick={() => act(() => api.patch('/api/me', { discordUserId: value.trim() || null }), 'Saved')}>
+          Save
+        </button>
+      </div>
+      <span class="tiny faint">Discord ▸ Settings ▸ Advanced ▸ Developer Mode, then right-click your name ▸ Copy User ID.</span>
+    </div>
   );
 }
 

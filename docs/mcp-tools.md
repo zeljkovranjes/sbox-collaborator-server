@@ -152,3 +152,32 @@ A failed result on a commit broadcasts a `build_broken` event and a warning to t
 | tool | scope | arguments | result |
 |---|---|---|---|
 | `activity_recent` ★ | R | `project`, `limit?`, `since?`, `minImportance?` | `Activity[]` |
+
+## Catch-up, history, handoffs, digests (v1.1)
+
+| tool | scope | arguments | result |
+|---|---|---|---|
+| `team_catch_up` ★ | R | `project`, `since?` (default: when you last caught up, max 14 days) | `CatchUp` – what changed while you were away |
+| `file_history` ★ | R | `project`, `path` (file or folder/), `limit?` | `FileHistory` – who touched it, when, why |
+| `task_handoff` ★ | W | `taskId`, `summary` (where I got to), `next?`, `gotchas?`, `files?`, `to?` (developer id), `keepReservations?` | `Task` – note stored, task released (or handed to `to`), owner messaged |
+| `team_digest` | R | `project`, `days?` (1–31, default 7) | `Digest` – team-wide summary for the period |
+
+```ts
+CatchUp     { since, until, summary: string /* compact markdown */, counts: { commits, changes, breaking, tasksCompleted, tasksClaimed, decisions, knowledge, messages, failedTests } }
+FileHistory { path, commits: { sha, shortSha, message, author, developerId, at, branch, taskId, url, change: "added"|"modified"|"removed" }[],
+              changes: { id, summary, developerName, completedAt, breaking: boolean, taskId }[],
+              tasks: { id, title, status, ownerName }[], reservations: Reservation[], asset: Asset|null }
+TaskNote    { id, taskId, kind: "handoff"|"note", authorId, authorName, summary, next, gotchas, files: string[], createdAt }
+Digest      { projectId, from, to, summary: string /* markdown */, stats: {…} }
+```
+
+Task additions (every Task result): `suggestedBranch` (`task.branch` or `task/<id>-<slug>`) and
+`lastHandoff: TaskNote | null`. `task_get` also returns `notes: TaskNote[]`. `task_claim` returns
+the claimed Task including `suggestedBranch`.
+
+`test_result` accepts `build` values the editor uses: `"editor-compile"` (automatic compile
+results) and `"playtest"` (automatic play-mode sessions).
+
+`project_update_context` accepts `discordWebhookUrl` (write; stored encrypted, never returned –
+the project shows `discordConfigured: true`). Developers set `discordUserId` via `PATCH /api/me`
+so notifications can @mention them.

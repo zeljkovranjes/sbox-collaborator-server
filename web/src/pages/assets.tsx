@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import { api, type Asset, type Project } from '../api';
 import { ago, Empty, Eyebrow, Icon, Loading, useLoad } from '../lib';
+import { HistoryPanel } from '../summary';
 
 const TYPES = ['', 'code', 'shader', 'model', 'material', 'texture', 'sound', 'scene', 'prefab', 'map', 'animgraph', 'source_model', 'image', 'audio', 'particle', 'style', 'compiled'];
 const TYPE_ICON: Record<string, string> = {
@@ -141,6 +142,10 @@ export function AssetsPage({ project }: { project: Project }) {
               <div class="panel-body tree">{deps.data?.children?.length ? <ul>{deps.data.children.map((c) => <Tree node={c} key={c.path} />)}</ul> : <span class="faint">No known dependencies.</span>}</div>
               <Eyebrow icon="north" title="Used by" />
               <div class="panel-body tree">{refs.data?.children?.length ? <ul>{refs.data.children.map((c) => <Tree node={c} key={c.path} />)}</ul> : <span class="faint">Nothing references this asset.</span>}</div>
+              <Eyebrow icon="history" title="History" />
+              <div class="panel-body">
+                <HistoryPanel project={project} initial={selected} key={selected} />
+              </div>
             </>
           )}
         </div>

@@ -1,4 +1,8 @@
+import { execFileSync, spawn } from 'node:child_process';
 import { createHmac } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -159,5 +163,85 @@ describe('webhook endpoint', () => {
     const signature = `sha256=${createHmac('sha256', 'webhook-secret').update(body).digest('hex')}`;
     const good = await fetch(`${base}/webhooks/github`, { method: 'POST', headers: { 'x-github-event': 'ping', 'x-github-delivery': 'ping-1', 'x-hub-signature-256': signature, 'content-type': 'application/json' }, body });
     expect(good.status).toBe(200);
+  });
+});
+
+describe('git hook (clients/git-hooks/collab-check.mjs)', () => {
+  const hook = join(process.cwd(), 'clients', 'git-hooks', 'collab-check.mjs');
+  // Async: the server under test lives in this process, so a blocking spawn would starve it.
+  const run = (cwd: string, args: string[], env: Record<string, string>, input = '') =>
+    new Promise<{ status: number | null; stderr: string }>((resolve) => {
+      const child = spawn(process.execPath, [hook, ...args], { cwd, env: { ...process.env, COLLAB_TOKEN: '', COLLAB_MODE: '', COLLAB_ALLOW: '', ...env } });
+      let stderr = '';
+      child.stderr.on('data', (d) => (stderr += d));
+      child.stdout.resume();
+      child.on('close', (status) => resolve({ status, stderr }));
+      child.stdin.end(input);
+    });
+
+  it('is served by the server for easy download', async () => {
+    const response = await fetch(`${base}/hooks/collab-check.mjs`);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('collab-check.mjs');
+  });
+
+  it('warns or blocks commits and pushes that touch a teammate’s reservation, and never blocks when the server is down', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'collab-hook-'));
+    const g = (...args: string[]) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
+    g('init', '-q', '-b', 'main');
+    g('config', 'user.email', 't@example.com');
+    g('config', 'user.name', 'Test');
+    writeFileSync(join(repo, '.collab.json'), JSON.stringify({ url: base, project: 'sailing', mode: 'warn' }));
+    mkdirSync(join(repo, 'Code'), { recursive: true });
+    writeFileSync(join(repo, 'Code', 'Hooked.cs'), 'class Hooked {}');
+    writeFileSync(join(repo, 'Code', 'Free.cs'), 'class Free {}');
+    const owner = await w.services.agents.register(w.chomnr, { project: 'sailing', clientType: 'claude-code', machine: 'HOOKTEST' });
+    await w.services.reservations.reserve({ ...w.chomnr, agentId: owner.id }, { project: 'sailing', paths: ['Code/Hooked.cs'], reason: 'hook test' });
+
+    g('add', 'Code/Free.cs');
+    expect((await run(repo, ['check', 'pre-commit'], { COLLAB_TOKEN: w.friendToken })).status).toBe(0);
+
+    g('add', 'Code/Hooked.cs');
+    const warn = await run(repo, ['check', 'pre-commit'], { COLLAB_TOKEN: w.friendToken });
+    expect(warn.status).toBe(0);
+    expect(warn.stderr).toContain('reserved by a teammate');
+    expect(warn.stderr).toContain('Code/Hooked.cs');
+
+    const block = await run(repo, ['check', 'pre-commit'], { COLLAB_TOKEN: w.friendToken, COLLAB_MODE: 'block' });
+    expect(block.status).toBe(1);
+    expect(block.stderr).toContain('stopped');
+    expect((await run(repo, ['check', 'pre-commit'], { COLLAB_TOKEN: w.friendToken, COLLAB_MODE: 'block', COLLAB_ALLOW: '1' })).status).toBe(0);
+
+    // Own reservations are not conflicts.
+    expect((await run(repo, ['check', 'pre-commit'], { COLLAB_TOKEN: w.chomnrToken, COLLAB_MODE: 'block' })).status).toBe(0);
+
+    g('commit', '-q', '--no-verify', '-m', 'touch reserved file');
+    const sha = g('rev-parse', 'HEAD');
+    const pushed = await run(repo, ['check', 'pre-push'], { COLLAB_TOKEN: w.friendToken, COLLAB_MODE: 'block' }, `refs/heads/main ${sha} refs/heads/main ${'0'.repeat(40)}\n`);
+    expect(pushed.status).toBe(1);
+    expect(pushed.stderr).toContain('push');
+
+    writeFileSync(join(repo, 'Code', 'Hooked.cs'), 'class Hooked { int x; }');
+    g('add', 'Code/Hooked.cs');
+    const down = await run(repo, ['check', 'pre-commit'], { COLLAB_TOKEN: w.friendToken, COLLAB_MODE: 'block', COLLAB_URL: 'http://127.0.0.1:1' });
+    expect(down.status).toBe(0);
+    expect(down.stderr).toContain('cannot reach');
+
+    const installed = await run(repo, ['install', '--block'], {});
+    expect(installed.status).toBe(0);
+    expect(readFileSync(join(repo, '.git', 'hooks', 'pre-commit'), 'utf8')).toContain('collab-check.mjs" check pre-commit');
+    expect(readFileSync(join(repo, '.git', 'hooks', 'pre-push'), 'utf8')).toContain('check pre-push');
+    rmSync(repo, { recursive: true, force: true });
+  }, 60_000);
+});
+
+describe('v1.1 endpoints', () => {
+  it('lets developers set their Discord id and lists digests', async () => {
+    const me = await call('/api/me', { method: 'PATCH', token: w.friendToken, body: { discordUserId: '223456789012345678' } });
+    expect(me.json.result.discordUserId).toBe('223456789012345678');
+    expect((await call('/api/me', { method: 'PATCH', token: w.friendToken, body: { discordUserId: 'x' } })).status).toBe(400);
+    expect((await call('/api/digests?project=sailing', { token: w.friendToken })).json.result).toEqual([]);
+    const tools = (await call('/api/tools', { token: w.friendToken })).json.result.map((t: { name: string }) => t.name);
+    expect(tools).toEqual(expect.arrayContaining(['team_catch_up', 'file_history', 'task_handoff', 'team_digest']));
   });
 });
