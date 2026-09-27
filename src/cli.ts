@@ -9,6 +9,7 @@ const HELP = `Collaborator server admin CLI
 
   developer add <id> --name "Name" [--github login] [--admin]
   developer list
+  developer role <id> admin|member
   developer disable <id>
 
   server-key create --name "for Alex" [--github login] [--uses 1] [--days 14] [--admin]
@@ -67,6 +68,12 @@ async function main() {
       case 'developer list':
         print(await s.accounts.listDevelopers());
         break;
+      case 'developer role': {
+        const role = positional[3];
+        if (!target || (role !== 'admin' && role !== 'member')) throw new Error('usage: developer role <id> admin|member');
+        print(await s.accounts.updateDeveloper(target, { role }));
+        break;
+      }
       case 'developer disable':
         if (!target) throw new Error('usage: developer disable <id>');
         print(await s.accounts.updateDeveloper(target, { disabled: true }));

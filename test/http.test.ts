@@ -235,6 +235,20 @@ describe('git hook (clients/git-hooks/collab-check.mjs)', () => {
   }, 60_000);
 });
 
+describe('admin role changes', () => {
+  it('lets an admin promote and demote a developer, and nobody else', async () => {
+    // A normal write key cannot do admin work, even for an admin developer.
+    expect((await call('/api/admin/developers/friend', { method: 'PATCH', token: w.chomnrToken, body: { role: 'admin' } })).status).toBe(403);
+    const admin = (await w.services.accounts.createAccessKey('chomnr', { name: 'admin', via: 'test', scopes: ['admin'] })).token;
+    const promote = await call('/api/admin/developers/friend', { method: 'PATCH', token: admin, body: { role: 'admin' } });
+    expect(promote.json.result.role).toBe('admin');
+    expect((await call('/api/admin/developers/chomnr', { method: 'PATCH', token: w.friendToken, body: { role: 'member' } })).status).toBe(403); // their key is not admin-scoped
+    const demote = await call('/api/admin/developers/friend', { method: 'PATCH', token: admin, body: { role: 'member' } });
+    expect(demote.json.result.role).toBe('member');
+    expect((await call('/api/admin/developers/chomnr', { method: 'PATCH', token: admin, body: { role: 'member' } })).status).toBe(400); // cannot demote yourself
+  });
+});
+
 describe('v1.1 endpoints', () => {
   it('lets developers set their Discord id and lists digests', async () => {
     const me = await call('/api/me', { method: 'PATCH', token: w.friendToken, body: { discordUserId: '223456789012345678' } });

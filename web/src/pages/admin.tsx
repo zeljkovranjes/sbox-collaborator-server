@@ -24,6 +24,11 @@ export function AdminPage({ projects, reloadProjects }: { projects: Project[]; r
   const [newProject, setNewProject] = useState(false);
   const act = useAction();
 
+  const setRole = async (d: DevRow) => {
+    const role = d.role === 'admin' ? 'member' : 'admin';
+    if (!confirm(role === 'admin' ? `Make ${d.displayName} an admin? Admins can invite people, manage keys and projects.` : `Make ${d.displayName} a normal member again?`)) return;
+    if (await act(() => api.patch(`/api/admin/developers/${d.id}`, { role }), role === 'admin' ? `${d.displayName} is now an admin` : `${d.displayName} is now a member`)) devs.reload();
+  };
   const toggle = async (d: DevRow) => {
     if (!confirm(`${d.disabled ? 'Re-enable' : 'Disable'} ${d.displayName}?`)) return;
     if (await act(() => api.patch(`/api/admin/developers/${d.id}`, { disabled: !d.disabled }), 'Updated')) devs.reload();
@@ -110,6 +115,9 @@ export function AdminPage({ projects, reloadProjects }: { projects: Project[]; r
                     </div>
                   </div>
                   <span class={`pill ${d.role === 'admin' ? 'orange' : 'ghost'}`}>{d.role}</span>
+                  <button class="btn ghost" onClick={() => setRole(d)} title={d.role === 'admin' ? 'Remove admin rights' : 'Give admin rights'}>
+                    {d.role === 'admin' ? 'Make member' : 'Make admin'}
+                  </button>
                   <button class="btn ghost" onClick={() => toggle(d)}>
                     {d.disabled ? 'Enable' : 'Disable'}
                   </button>

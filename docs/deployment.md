@@ -74,6 +74,11 @@ docker compose exec server node dist/src/cli.js key create chomnr --name "desk c
 docker compose exec server node dist/src/cli.js project create sailing --name Sailing --kind game --repo you/sailing
 ```
 
+### Making someone an admin later
+
+Dashboard: **Server admin ▸ Developers ▸ Make admin** (and *Make member* to undo). Or from the
+server: `docker compose exec server node dist/src/cli.js developer role <id> admin`.
+
 ## 6. GitHub webhooks
 
 See [github-webhooks.md](github-webhooks.md).
