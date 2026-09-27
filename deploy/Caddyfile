@@ -1,0 +1,8 @@
+# Automatic HTTPS (Let's Encrypt) in front of the collaboration server.
+{$COLLAB_DOMAIN} {
+	encode zstd gzip
+	# SSE and MCP streams must not be buffered.
+	reverse_proxy server:8080 {
+		flush_interval -1
+	}
+}

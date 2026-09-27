@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+
+# Local data (SQLite database, backups)
+data/
+backups/
+*.sqlite
+*.sqlite-*
+*.dump
+
+# Credentials and secrets: never commit these
+.env
+.env.*
+!.env.example
+credentials.json
+*.credentials.json
+secrets/
+*.key
+*.pem
+*.pfx
+*token*.txt

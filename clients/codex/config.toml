@@ -1,0 +1,4 @@
+# ~/.codex/config.toml  – the key comes from the COLLAB_TOKEN environment variable.
+[mcp_servers.collaborator]
+url = "https://mcp.example.com/mcp"
+bearer_token_env_var = "COLLAB_TOKEN"

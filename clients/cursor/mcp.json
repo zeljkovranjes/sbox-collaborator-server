@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "collaborator": {
+      "url": "https://mcp.example.com/mcp?profile=core",
+      "headers": {
+        "Authorization": "Bearer ${env:COLLAB_TOKEN}"
+      }
+    }
+  }
+}

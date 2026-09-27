@@ -1,0 +1,62 @@
+# Collaborator server + PostgreSQL.
+#   cp .env.example .env   # fill in the values
+#   docker compose up -d
+# Optional automatic HTTPS with Caddy:  docker compose --profile caddy up -d
+
+services:
+  server:
+    build: .
+    image: sbox-collaborator-server:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://collab:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/collab
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+    depends_on:
+      db:
+        condition: service_healthy
+    # Only reachable from this machine; the reverse proxy provides HTTPS.
+    ports:
+      - "127.0.0.1:8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: collab
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: collab
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U collab -d collab"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  caddy:
+    profiles: ["caddy"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      COLLAB_DOMAIN: ${COLLAB_DOMAIN:?set COLLAB_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
